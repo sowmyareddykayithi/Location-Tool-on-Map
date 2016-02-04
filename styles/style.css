@@ -1,0 +1,74 @@
+/* Styles go here */
+
+.my-controller {
+  border: 1px solid #fcc;
+  padding: 5px;
+  margin: 3px;
+}
+.my-controller small {
+  color: #c99;
+}
+.other-controller {
+  border: 1px solid #ccf;
+  padding: 5px;
+  margin: 3px;
+}
+.other-controller small {
+  color: #99c;
+}
+.third-controller {
+  border: 1px solid #cfc;
+  padding: 5px;
+  margin: 3px;
+}
+.third-controller small {
+  color: #9c9;
+}
+ 
+
+ .Header { color: rgb(231, 223, 78); background-color: black; width: 122%; height: 40px;border-radius: 5px;padding-left: 10px;padding-top: 4px;}
+   #btnshow{background: rgb(10, 99, 137); color: wheat; border-radius: 3px; font-size: 15px;height: 33px; border-radius: 5px;}
+   #EditButton{background: rgb(216, 31, 31); color: wheat; border-radius: 3px; font-size: 15px;height: 33px; border-radius: 5px;display:none;}
+   #btnSave{background: rgb(7, 109, 39); color: wheat; border-radius: 3px;font-size: 15px;height: 33px; border-radius: 5px;display:none;}  
+   #btnGlobalCenter{background: rgb(86, 85, 26); color: wheat; border-radius: 3px; font-size: 15px;height: 33px;border-radius: 5px;display:none;}
+   .CenterMap { width:130%; height:80%;} 
+   
+   #dvLocationSelected { padding-bottom:10px;}
+   #tblLocations,#tblLocationSelected{font-size: 12px;}
+   #btnNewLocation{background: rgb(7, 140, 142); color: Wheat; border-radius: 3px;font-size: 15px;height: 33px; border-radius: 5px;}
+   
+   #btnAddPolygon{background: rgb(16, 48, 90); color: Wheat; border-radius: 3px;font-size: 15px;height: 33px; border-radius: 5px;display:none;}
+   #btnClearAll{ background: rgb(113, 3, 83); color: wheat; border-radius: 3px; font-size: 15px; height: 33px; border-radius: 5px;}
+  .modal-header { background-color: #5898C3  !important; }
+  #btnPublishLoc{background: rgb(16, 48, 90); color: Wheat; border-radius: 3px;font-size: 15px;height: 33px; border-radius: 5px; position:absolute; right:0px; }
+  #btnVersionHistory{background-color: rgb(216, 31, 31); color:Wheat; border-radius:3px; font-size:15px;height:33px; border-radius:5px;position:absolute; right:160px;}
+
+   .modalLoading {
+    display:    none;
+    position:   fixed;
+    z-index:    1000;
+    top:        0;
+    left:       0;
+    height:     100%;
+    width:      100%;
+    background: rgba( 255, 255, 255, .8 ) 
+                url('http://i.stack.imgur.com/FhHRx.gif') 
+                50% 50% 
+                no-repeat;
+}
+
+
+body.loading {
+    overflow: hidden;   
+}
+
+body.loading .modalLoading {
+    display: block;
+}
+
+#divMsgContent
+{
+    font-size: 13px;
+    font-weight: bold;
+}
+
