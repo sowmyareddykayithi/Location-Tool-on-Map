@@ -1,0 +1,1301 @@
+<html ng-app="myApp">
+<title>LOST</title>
+<!-- CSS -->
+<link rel="stylesheet" href="styles/angucomplete.css">
+<link rel="stylesheet" href="styles/bootstrap.min.css">
+<link rel="stylesheet" href="styles/bootstrap-theme.min.css">
+<link rel="stylesheet" href="styles/style.css" />
+<!-- Scripts -->
+<script src="scripts/angular.js"></script>
+<script src="scripts/angucomplete.js"></script>
+<!-- <script src="http://maps.google.com/maps/api/js"></script> -->
+<!-- <script src="https://maps.googleapis.com/maps/api/js?v=3.exp&signed_in=true&libraries=drawing"></script> -->
+<script src="scripts/ng-map.min.js"></script>
+<script src="scripts/jquery-2.0.3.min.js"></script>
+<script src="scripts/bootstrap.min.js"></script>
+<script src="scripts/dirPagination.js"></script>
+<script src="scripts/clipper.js"></script>
+<script src="http://maps.google.com/maps/api/js?sensor=false"></script>
+<!-- <script src="scripts/mapComparison.js"></script> -->
+
+
+<script>
+
+    var myApp = angular.module('myApp', ['ngMap','angucomplete','angularUtils.directives.dirPagination']);
+    var bounds = new google.maps.LatLngBounds();
+ 
+    myApp.controller("ngMapCtrl",['$scope', "$http","$timeout",function($scope, $http, $timeout){  
+      
+        $scope.currentPage = 1;
+        $scope.pageSize = 18;
+        $scope.locations = [];
+        $scope.selectedLocations = [];
+	    $scope.polygonColors = [];
+        $scope.polygonBorderColors = [];  
+        $scope.txtSearch1 = "";
+        $scope.search = {text:""};
+        $scope.txtLocationVisible = false;
+        $scope.btnVersionSelect = false;
+        $scope.search.chkShowLoc = true;
+		$scope.mapComparsion = false;
+		$scope.mapMain = true;
+		$scope.ShowMetaUpdate = false;
+		$scope.txtLocationEditable = true;
+		
+        var map;
+		var locTimeout ='';
+        var polygonColors = ["#4DB84D","#7171F7","#EF2B2B","#EFAC4B","#EF1BB9","#FF0000"];
+        var polygonBorderColors = ["#004C00","#1A1A66","#660000","#804C00","#66004C","#660033"];
+        
+		var map_Comparison = new google.maps.Map(document.getElementById('map'), {
+											  zoom: 9,
+											  center: new google.maps.LatLng(42.664136, -75.21510599999999),
+											  mapTypeId: google.maps.MapTypeId.ROADMAP,
+											  disableDefaultUI: true,
+											  zoomControl: true
+											});
+											
+        $scope.getPolygonColor = function(index){
+            return $scope.polygonColors[index%$scope.polygonColors.length];
+        };
+  
+        $scope.getPolygonBorderColor = function(index){
+            return $scope.polygonBorderColors[index%$scope.polygonColors.length];
+        };   
+   
+        $scope.$watch('search.text', function() {       
+            var typed = $scope.search.text;
+            var searchLocService;
+            //Enter should minimum 3 characters
+            if(typed.length > 2)
+            {   
+                if(locTimeout){ $timeout.cancel(locTimeout); }
+                locTimeout = $timeout(function() {
+                    $scope.typed = typed;    
+                    if($scope.search.chkShowLoc)
+                    {
+                        var showLocService = "/lost-web/search?name="+typed+"&status=ACTIVE,PENDING,DEPRECATED";     
+                        searchLocService = showLocService;         
+                    }
+                    else
+                    {
+                        //searchLocService  = searchService+typed;
+                        searchLocService = 'JSON/'+ typed+ ".json"
+                    } 
+                    //$http.get(searchLocService).success(function(data){  
+                    $http.get('JSON/'+typed+".json").success(function(data){ 
+                        var selected = $scope.selectedLocations.map(function(item){
+                            return item.geoLibId;     
+                        });
+        
+                        $scope.locations = data;        
+                        angular.forEach( $scope.locations, function(item){
+                            if(selected.indexOf(item.geoLibId)>=0){
+                                item.checked = true;
+                            }
+                        });         
+                    });
+                },2000);
+            }
+            else{
+                $scope.locations = [];           
+            }          
+        });
+  
+        $scope.pageChangeHandler = function(num) {
+            console.log('location page changed to ' + num);
+        };
+  
+        $scope.searchSelected = function(val){
+            return function (loc) {
+                if(val){              
+                    return loc.checked==true;       
+                }
+                return  loc.checked==undefined || loc.checked==false;
+            }
+        };
+    
+        $scope.$on('mapInitialized', function(evt, evtMap){
+  
+            map = evtMap;
+            $body = $("body");   
+            map.addListener('click', function(e) {
+                if($scope.isNew && $scope.paths[$scope.paths.length-1].length< 3 ){
+                    var loc = e.latLng;
+                    $scope.paths[$scope.paths.length-1].push([loc.lat(),loc.lng()]);
+                    $scope.paths = angular.copy($scope.paths);
+                    $scope.$apply();
+                }            
+            });
+    
+            $scope.SelectedLocationList = {checkbox: function(location)
+            {     
+                // Maximum select 5 locations           
+                if($scope.selectedLocations.length < 5)
+                {
+                    location.checked = true;   
+                    $scope.selectedLocations.push(location);
+                } 
+            }     
+            };
+   
+            $scope.btnRemove = { Remove: function(location)
+            {
+                angular.forEach( $scope.locations, function(item){
+                    if(item.geoLibId==location.geoLibId){
+                        item.checked = false;
+                    }
+                });
+                $scope.selectedLocations.splice($scope.selectedLocations.indexOf(location),1);
+                location.checked = false;                        
+            }
+            };
+            <!--  -->
+               //To create new polygon
+              $scope.btnCreate = function()
+              {      
+                  var txtPolygon = $('#txtNewLocation').val();
+                  var ddlState = $('#ddlState').val();
+                  var ddlType = $('#ddlType').val();
+                  var ddlStatus = $('#ddlStatus').val();
+
+                  $scope.PolygonName = txtPolygon;
+                  $scope.PolygonState = ddlState;
+                  $scope.PolygonType = ddlType;
+                  $scope.PolygonStatus = ddlStatus;
+      
+                  if(txtPolygon == ''){
+                      $('#lblNewLocationMsg').text("* Enter the Name");    
+                      return;         
+                  }       
+                  else if(ddlState == ''){
+                      $('#lblNewLocationMsg').text("* Enter the State");
+                      return;        
+                  }
+                  else if(ddlType == ''){
+                      $('#lblNewLocationMsg').text("* Enter the Type");      
+                      return;
+                  }
+                  else if(ddlStatus == null){
+                      $('#lblNewLocationMsg').text("* Select the Status");
+                      return;
+                  }
+                  $('#lblNewLocationMsg').text();       
+                  $scope.showPolygonModal = !$scope.showPolygonModal;
+       
+                  $scope.isNew = true;      
+                  $scope.paths=[[]];
+                  $scope.isEdit = true; 
+                  $scope.txtLocationVisible = true;
+				  $scope.txtLocationEditable = true;
+                  $scope.EditButton = "Stop Editing";  
+                  $('#btnAddPolygon').show();
+                  $('#btnNewLocation').hide();
+                  $('#btnSave').show();
+                  $('#EditButton').show();
+       
+                  var Info = '';
+                  Info += "Name : " + txtPolygon;
+                  Info += ";\n\r State : " + ddlState;
+                  Info += ";\n\r Status : " + ddlStatus;
+                  Info += ";\n\r Type : " + ddlType;
+                  $scope.lblInfo = Info;
+                  $('#dvMsg').show();  
+      
+                  $('#txtNewLocation').val('');
+                  $('#ddlState').val('');
+                  $('#ddlType').val('');
+                  $('#ddlStatus').val('');
+                  $('#lblNewLocationMsg').text('');
+              }
+     
+            //Add multiple polygons
+            $scope.btnAddPolygon = function()
+            {                 
+                $scope.isNew = true;  
+                $scope.isEdit = true; 
+                $scope.EditButton = "Stop Editing";  
+                $scope.paths.push([]); 
+            }    
+            $scope.setBounds = function() {
+                map.fitBounds(bounds);
+            }
+        }); 
+   
+        $scope.showModal = false; 
+        $scope.toggleModal = function(){
+            $scope.showModal = !$scope.showModal;
+            $scope.search.currentPage = 1;    
+        };  
+  
+        $scope.showPolygonModal = false;
+        $scope.btnNewLocation = function(){
+		    $scope.btnCreate = true;
+			$scope.ShowMetaUpdate = false;
+            $scope.showPolygonModal = !$scope.showPolygonModal;
+        };
+     
+        $scope.EditButton = "Edit lines";
+        $scope.isEdit = false;
+        $('#dvMsg').hide();  
+        $scope.paths=[[[25.774252, -80.190262]]];
+        $scope.seqId = [];
+        var searchService = "/lost-web/search?name=";
+        var geoLibService = "/lost-web/location/";
+     
+        $scope.btnSubmitLocation = function()
+        {
+            if (confirm($scope.selectedLocations.length + " Locations selected. Do you want to submit") == true ) {       
+   
+                $scope.showModal = false;           
+                var GeoLibId = '';     
+              //  var bounds = new google.maps.LatLngBounds();
+                var polygons =[];        
+                var locationPaths = [];	  
+                var countIndex = {};
+                $scope.mapPolygons = [];  
+                $scope.selectedVersionLocations = [];
+				
+              //  $scope.polygonColors = [];
+             //   $scope.polygonBorderColors = [];
+                $scope.paths =[];	 
+                $scope.versionList = {
+                    updatedDate:'',
+                    versionHistory:[]
+                };
+		 
+                for(i = 0;i< $scope.selectedLocations.length;i++)
+                {     
+                    GeoLibId =  $scope.selectedLocations[i].geoLibId ;
+                    $scope.hdnGeoId = GeoLibId;        
+                    $body.addClass("loading"); 
+                    var count= i+1;
+     
+                    countIndex["geo_"+ GeoLibId] = count-1;
+                    // To get selected location based on geoLibId         
+                    //$http.get(geoLibService+GeoLibId).success(function(response)
+                    $http.get("JSON/"+GeoLibId+".json").success(function(response)
+                    {
+                        $scope.metaData = JSON.stringify(response.metadata);               
+                        $scope.txtLocation = JSON.stringify(response); 			
+                        $scope.seqId = angular.forEach(response.polygonCollection.activePolygons, function(response) {
+                            response.seqId;
+                        }); 
+				
+                        $scope.mapPolygons.push(response);
+                        $body.removeClass("loading"); 
+                        var path = response.polygonCollection.activePolygons.map(function(polygon){
+                            return polygon.coordinates.map(function(path){
+                                bounds.extend(new google.maps.LatLng(path.lat,path.long));  
+                                return [path.lat, path.long];
+                            }); 
+                        });
+			  
+                        locationPaths.push(path);            
+                        map.fitBounds(bounds);
+                        polygons.push(locationPaths);
+				
+                        angular.forEach(path,function(item){
+                            $scope.polygonColors.push(polygonColors[countIndex["geo_"+ response.metadata.geoLibId]%polygonColors.length]);
+                            $scope.polygonBorderColors.push(polygonBorderColors[countIndex["geo_"+ response.metadata.geoLibId]%polygonBorderColors.length]);
+                            $scope.paths.push(item);
+                        });            
+                    });
+                }
+                
+                $scope.search.text =''; 
+                $('#btnAddPolygon').show();
+                $('#btnGlobalCenter').show();
+                $('#btnNewLocation').hide();
+                $('#btnSave').show();
+                $('#EditButton').show();
+                if($scope.selectedLocations.length == 1){	
+                    $scope.versionList.updated = $scope.selectedLocations[0].updated;
+                    $scope.versionList.versionHistory = angular.copy($scope.selectedLocations[0].archivedLocations);		  			
+                    $scope.txtLocationVisible = true;
+					$scope.txtLocationEditable = true;
+                    $scope.btnVersionSelect = true;
+					$('#btnEditMetadata').show();
+                }			
+                else{
+                    $('#EditButton').hide();
+                    $('#btnGlobalCenter').hide();
+                    $('#btnSave').hide();
+                    $('#btnAddPolygon').hide();
+                    $('#btnNewLocation').show();
+					$('#btnEditMetadata').hide();
+                    $scope.txtLocationVisible = false;
+                    $scope.btnVersionSelect = false;
+                    $scope.txtLocation = "";
+                }
+            }
+        };
+   
+        $scope.ddlState = false;
+        $scope.showState = function(data) { 
+            $scope.ddlState = (data == "DMA" || data == "STATE");     
+			 
+			 if(data == "DMA" || data == "STATE"){
+			  $('#ddlState').val('Null');
+			 }
+        };
+  
+        $scope.btnSaveClick = function()
+        {
+            var GeoLibId = $scope.hdnGeoId;
+            var curMetaData =  $scope.metaData;
+            var saveService = "/lost-web/save_location/";
+          
+            // To update the GeoLib metaData coordinates Json value
+            $http.put(saveService+GeoLibId,$scope.txtLocation).then(function(response) {
+                //server returns response with an success status.
+                alert('Updated Successfully');
+                return;
+            }, function(response) {               
+                // server returns response with an error status.
+                alert('Server error');
+                return;
+            });
+        }
+    
+        $scope.edit = function()
+        { 
+            if ($('#EditButton').attr("value") == 'Edit lines'){       
+                $scope.isEdit = true;         
+                $scope.EditButton = "Stop Editing";    
+                $('#btnSave').prop('disabled', true);
+            }
+            else{
+                $scope.isEdit = false;
+                $scope.EditButton = "Edit lines";
+                $('#btnSave').prop('disabled', false);
+        
+                var polygonCollection =[];
+                for(var i=0;i<$scope.paths.length;i++){   
+                    var paths = [];
+                    var path = $scope.map.shapes["polygons_"+i].getPath();
+                //    var bounds = new google.maps.LatLngBounds();
+                    var endPoint = {};
+                    var lPoint;
+                    for(var j=0;j<path.getLength(); j++){
+                        var latLong = path.getAt(j);                        
+                        paths.push({lat:latLong.lat(),long:latLong.lng()});           
+                        if (j==0)       
+                        {
+                            // if (path.getAt(path.getLength() - 1).G != latLong.lat())     
+                            if (path.j[path.getLength() - 1].lat() != latLong.lat())     				
+                            {               
+                                endPoint = {lat:latLong.lat(),long:latLong.lng()}; 
+                                lPoint = 0;
+                            }
+                        }
+                    }
+                    if(lPoint == 0)
+                    {
+                        paths.push(endPoint);          
+                    }
+                    if ($scope.isNew == true){
+                        polygonCollection.push({coordinates:paths, status:"PENDING"});				
+                    }
+                    else{
+                        polygonCollection.push({seqId:$scope.seqId[i].seqId,coordinates:paths, status:"ACTIVE"});                
+                    }           
+                }
+     
+                var curMetaData;
+                if ($scope.isNew == true){ 
+
+                    curMetaData = "{"+'"name":"'+ $scope.PolygonName  +'","state":"'+ $scope.PolygonState +'","type":"'+ $scope.PolygonType +'","status":"'+  $scope.PolygonStatus +'"'+"}"; 
+                }
+                else{
+                    curMetaData = $scope.metaData;
+                }
+
+                $scope.txtLocation = "{"+  '"metadata":'+  curMetaData + ',"polygonCollection":{"activePolygons":' + JSON.stringify(polygonCollection)+ "}"+"}";
+                $scope.paths= polygonCollection.map(function(polygon){
+                    return polygon.coordinates.map(function(path){
+                        bounds.extend(new google.maps.LatLng(path.lat,path.long));              
+                        return [path.lat, path.long];
+                    });             
+                }); 
+                map.fitBounds(bounds);
+            }
+            $scope.paths = angular.copy($scope.paths);    
+        }
+      
+        $scope.btnClose = function(location)
+        {     
+            angular.forEach( $scope.locations, function(item){
+                if(item.geoLibId==location.geoLibId){
+                    item.checked = false;
+                }
+            });
+            $scope.selectedLocations.splice($scope.selectedLocations.indexOf(location),1);
+            location.checked = false;  
+    
+            $scope.showModal = false;      
+            var polygons =[];        
+            var GeoLibId = '';               
+            var locationPaths = [];
+            $scope.mapPolygons = [];
+            $scope.paths =[];
+            for(i = 0;i< $scope.selectedLocations.length;i++)
+            {     
+                GeoLibId =  $scope.selectedLocations[i].geoLibId ;
+                $scope.hdnGeoId = GeoLibId;        
+                $body.addClass("loading"); 
+                var count= i+1;
+      
+                // To get selected location based on geoLibId         
+                // $http.get(geoLibService+GeoLibId).success(function(item)
+                $http.get('JSON/'+ GeoLibId + '.json').success(function(item)
+                {
+                    $scope.mapPolygons.push(item);
+            
+                    $body.removeClass("loading"); 
+                    var path = item.polygonCollection.activePolygons.map(function(polygon){
+                        return polygon.coordinates.map(function(path){
+                            bounds.extend(new google.maps.LatLng(path.lat,path.long));                                        
+                            return [path.lat, path.long];
+                        }); 
+                    });
+                    locationPaths.push(path);
+              
+                    map.fitBounds(bounds);
+                    polygons.push(locationPaths);
+					
+					 if($scope.selectedLocations.length == 1){
+							$scope.txtLocation = JSON.stringify(item); 
+					}
+						
+                    angular.forEach(path,function(item){
+                        $scope.paths.push(item);
+                    });            
+                });
+            }
+                
+            $scope.search.text =''; 
+            $('#btnAddPolygon').show();
+            $('#btnNewLocation').hide();
+            $('#btnSave').show();
+            $('#EditButton').show();   
+            $('#btnGlobalCenter').show();
+			
+            if($scope.selectedLocations.length == 1){
+                $scope.txtLocationVisible = true;
+				$scope.txtLocationEditable = true;
+				$scope.btnVersionSelect = true;
+			
+		       $scope.versionList.updated = $scope.selectedLocations[0].updated;
+               $scope.versionList.versionHistory = angular.copy($scope.selectedLocations[0].archivedLocations);	
+			   $('#btnEditMetadata').show();
+            }		
+            else{
+				$scope.checked = 0;				
+			    $scope.btnVersionSelect = false;
+                $('#EditButton').hide();
+                $('#btnGlobalCenter').hide();
+                $('#btnSave').hide();
+                $('#btnAddPolygon').hide();
+				$('#btnEditMetadata').hide();				
+                $('#btnNewLocation').show();
+                $scope.txtLocationVisible = false;
+                //$scope.txtLocation = "";
+            }
+            //	else{
+            //	  $scope.txtLocationVisible = false;
+            //	}
+            return;
+  
+         //   $scope.txtLocation = "";
+            $scope.isEdit = false;
+            $('#btnAddPolygon').show();
+        }; 
+    
+        $scope.btnClearLocation = function(location){
+            angular.forEach(location, function(item){       
+                item.checked = false;       
+            });    
+            $scope.selectedLocations=[];
+        };
+  
+  
+        $scope.btnClearAll = function(){
+            window.location.reload();
+        };
+    
+        //To Set the location centre of the polygon in map 
+        $scope.btnCenter = function(location){      
+        //    var bounds = new google.maps.LatLngBounds();
+            var locationPaths = [];       
+            // To get selected location based on geoLibId         
+            $http.get(geoLibService+location.geoLibId).success(function(item)
+            {
+        
+                $scope.mapPolygons.push(item);            
+                $body.removeClass("loading"); 
+                var path = item.polygonCollection.activePolygons.map(function(polygon){
+                    return polygon.coordinates.map(function(path){
+                        bounds.extend(new google.maps.LatLng(path.lat,path.long));                                        
+                        return [path.lat, path.long];
+                    }); 
+                });
+                locationPaths.push(path);
+              
+                map.fitBounds(bounds);
+                polygons.push(locationPaths);            
+                angular.forEach(path,function(item){
+                    $scope.paths.push(item);
+                });            
+            });
+        };
+   
+        $scope.btnGlobalCenterMap = function(location){   
+            var polygons =[];        
+            var GeoLibId = '';     
+        //    var bounds = new google.maps.LatLngBounds();
+            var locationPaths = [];
+            $scope.mapPolygons = [];
+            var countIndex = {};
+          //  $scope.polygonColors = [];
+          //  $scope.polygonBorderColors = [];
+            $scope.paths =[];
+            for(i = 0;i< $scope.selectedLocations.length;i++)
+            {     
+                GeoLibId =  $scope.selectedLocations[i].geoLibId ;
+                $scope.hdnGeoId = GeoLibId;        
+                $body.addClass("loading"); 
+                var count= i+1;
+     
+                countIndex["geo_"+ GeoLibId] = count-1;
+                // To get selected location based on geoLibId         
+                $http.get(geoLibService+GeoLibId).success(function(response)
+                {
+                    $scope.mapPolygons.push(response);
+                    $body.removeClass("loading"); 
+                    var path = response.polygonCollection.activePolygons.map(function(polygon){
+                        return polygon.coordinates.map(function(path){
+                            bounds.extend(new google.maps.LatLng(path.lat,path.long));   
+                            return [path.lat, path.long];
+                        }); 
+                    });
+          
+                    locationPaths.push(path);
+            
+                    map.fitBounds(bounds);
+                    polygons.push(locationPaths);
+            
+                    angular.forEach(path,function(item){
+                        $scope.polygonColors.push(polygonColors[countIndex["geo_"+ response.metadata.geoLibId]%polygonColors.length]);
+                        $scope.polygonBorderColors.push(polygonBorderColors[countIndex["geo_"+ response.metadata.geoLibId]%polygonBorderColors.length]);          
+                        $scope.paths.push(item);
+                    });            
+                });
+            }   
+        }   
+   
+        $scope.chkFindLocations = function()
+        {
+			//$scope.search.chkShowLoc = !$scope.search.chkShowLoc;
+		
+           if($scope.search.chkFindLoc == true)
+           {
+                $scope.search.text ="";
+               $scope.search.chkShowLoc = false;
+       
+                var findLocation = "/lost-web/unpublished_locations";
+                $http.get(findLocation).success(function(data){      
+                    angular.forEach(data, function(location){
+                        $scope.locations.push(location); 
+                    });               
+                });     
+           }
+            else{
+                $scope.search.text ="";
+                $scope.locations = [];      
+            } 
+        }   
+   
+        $scope.chkShowLocations = function() {   
+			//$scope.search.chkFindLoc = !$scope.search.chkFindLoc;
+		  
+            if($scope.search.chkShowLoc == true)
+            {
+              	$scope.search.chkFindLoc = false;
+                var showLocService = "/lost-web/search?name="+$scope.typed+"&status=ACTIVE,PENDING,DEPRECATED";    
+                $http.get(showLocService).success(function(data){       
+                    angular.forEach(data, function(location){
+                        $scope.locations.push(location); 
+                    }); 
+                });    
+            }
+            else{ 
+                $http.get(searchService+$scope.typed).success(function(data){   
+                    var selected = $scope.selectedLocations.map(function(item){
+                        return item.geoLibId;      
+                    });
+        
+                    $scope.locations = data;        
+                    angular.forEach( $scope.locations, function(item){
+                        if(selected.indexOf(item.geoLibId)>=0){
+                            item.checked = true;
+                        }
+                    });         
+                });
+            }
+        }
+        var findLocation = "/lost-web/unpublished_locations";  // To get the unpublished locations
+        var servicePublishLoc = "/lost-web/publish_locations" // Service for to update the data
+     
+        $scope.btnSubmitPublishLoc = function(findLocation){    
+  
+            var pendingCount = 0;
+            var depCount =0;          
+            if(confirm("Status changes, PENDING as ACTIVE and DEPRECATED as INACTIVE locations will be deleted" ) == true)
+            {
+               angular.forEach(findLocation,function(item) {
+                    if(item.status == "PENDING")
+                    {                      
+                        pendingCount +=1; 
+                    }
+                    else if (item.status=="DEPRECATED")
+                    {                       
+                        depCount +=1;
+                    }         
+					
+                });
+				
+              alert(pendingCount + " location changed into Pending to ACTIVE and"+ depCount +"location changed into Deprecated to INACTIVE.") ;           		
+                //Updated the status
+                $http.put(servicePublishLoc).then(function(response) {
+                    //server returns response with an success status. 
+                    alert('The publication process was successful completed');  
+        
+                }, function(response) {               
+                    // server returns response with an error status.
+                    alert('Server error');
+                    return;
+                });
+            }
+        }; 
+ 
+        //To show version list based filtered location in Pop-up 
+        $scope.showVersionModal = false;
+        $scope.btnVersionHistory = function(){
+            $scope.showVersionModal = !$scope.showVersionModal;	  
+        };
+  
+    
+		    $scope.limit = 2;
+			$scope.checked = 0;
+			$scope.selectedVersionLocations = [];
+		
+		
+		$scope.chkVersion = function(verHistory){
+		
+		  if(verHistory.chkVersionSelect == true)
+            {
+                $scope.checked++;
+                $scope.selectedVersionLocations.push(verHistory);
+            }
+			else if (verHistory.chkVersionSelect == false)
+			{
+			    $scope.checked--;
+				$scope.selectedVersionLocations.splice($scope.selectedVersionLocations.indexOf(verHistory), 1)
+			}
+            else {
+    			$scope.checked--;
+			}
+		  
+            if($scope.checked > 2)
+            {
+                $scope.showVersionModal = false;
+			}
+		}
+		 
+     /*  $scope.btnVersionSubmit = function(verHistory){
+			var versionNo;
+			var locationPaths = [];
+			var polygons =[];
+			$scope.showVersionModal = false;
+		  //var bounds = new google.maps.LatLngBounds();
+		         
+                $scope.txtLocationVisible = false;
+		        alert($scope.checked +" version are selected.");
+                for(i = 0;i<$scope.selectedVersionLocations.length;i++)
+				{
+				    versionNo = $scope.selectedVersionLocations[i].version;
+                   // var versionService = "/lost-web/location/"+ $scope.hdnGeoId +"?version=";
+                   
+					//$http.get(versionService+versionNo).success(function(response){       
+					$http.get("JSON/310_V"+versionNo+".json").success(function(response){   
+					
+						   $scope.mapPolygons.push(response);
+						   $body.removeClass("loading"); 
+						   var path = response.polygonCollection.activePolygons.map(function(polygon){
+								return polygon.coordinates.map(function(path){
+								  bounds.extend(new google.maps.LatLng(path.lat,path.long));  
+								return [path.lat, path.long];
+							  }); 
+						  });
+					  
+						  locationPaths.push(path);
+						
+						  map.fitBounds(bounds);
+						  polygons.push(locationPaths);
+						  angular.forEach(path,function(item){
+								$scope.polygonColors.push(polygonColors[versionNo]);
+								$scope.polygonBorderColors.push(polygonBorderColors[versionNo]);
+								$scope.paths.push(item);
+							  }); 
+					});  
+				}
+            	
+        }	*/
+		
+	$scope.btnVersionSubmit = function(verHistory){
+		  var array_polygon= new Array();
+		  var array_clipper_polygon=[];
+		  var cpr = new ClipperLib.Clipper();
+		  var subj_polygons = new ClipperLib.Paths();
+		  var solution_polygons = new ClipperLib.Paths();
+		  var clipType = ClipperLib.ClipType.ctUnion;
+          var arr_polygon1 = [];
+		  var arr_polygon2 = [];
+		  var locationPaths = [];
+		  var polygons =[];  
+		  $scope.mapPolygons =[];
+		  $scope.showVersionModal = false;
+		
+		     var index= 1;
+		     for(i = 0;i<$scope.selectedVersionLocations.length;i++)
+		     {
+				    versionNo = $scope.selectedVersionLocations[i].version;
+                     
+			      $http.get("JSON/378_V"+versionNo+".json").success(function(response){
+				   
+				   if($scope.selectedVersionLocations.length == 1)
+				   {
+				              $scope.txtLocation = JSON.stringify(response); 
+						      $scope.mapPolygons.push(response);
+							  var singlePath = response.polygonCollection.activePolygons.map(function(polygon){
+								return polygon.coordinates.map(function(singlePath){
+                                   bounds.extend(new google.maps.LatLng(singlePath.lat,singlePath.long));  
+                                return [singlePath.lat, singlePath.long];
+                              }); 
+							});
+			  
+							locationPaths.push(singlePath);            
+							map.fitBounds(bounds);
+							polygons.push(locationPaths);
+							
+							
+				   }
+				   else{
+				   var idx = index;
+					index++;
+						 	    var path = response.polygonCollection.activePolygons.map(function(polygon){
+									angular.forEach(polygon.coordinates, function(path){
+									if(idx==1){									
+											arr_polygon1.push(new google.maps.LatLng (path.lat,path.long));
+											//bounds.extend(new google.maps.LatLng(path.lat,path.long));
+										}else{
+											arr_polygon2.push(new google.maps.LatLng (path.lat,path.long));
+										}
+									});
+						 });
+						 
+						 if(index == 3)
+						 {
+						 
+								  function mergePolygon()
+								  {
+									  for(j=0;j<array_polygon.length;j++){
+										  array_polygon_clipper = createarray_clipper_polygon(array_polygon[j]);
+										  subj_polygons.push(array_polygon_clipper);
+									  }
+									  cpr.AddPaths(subj_polygons, ClipperLib.PolyType.ptSubject, true);
+									  var succeeded = cpr.Execute(clipType, solution_polygons);
+									  return solution_polygons;
+								  }
+								  function getpathsolution(poly){
+									  for(i = 0; i < poly.length; i++) {
+										  for(j = 0; j < poly[i].length; j++) {
+											  console.log(poly[i][j].X);
+											  console.log(poly[i][j].Y);
+										  }
+									  }
+								  }
+								  function createarray_clipper_polygon(array){
+									  var subj_polygon = new ClipperLib.Path();
+									  for(i=0;i<array.length;i++){
+
+										  var latx =array[i].lat();
+										  var lngx =array[i].lng();
+
+										  subj_polygon.push(new ClipperLib.FPoint(latx, lngx));
+
+									  }
+									return subj_polygon;
+								  }						
+ 
+								 polygon1 = new google.maps.Polygon({
+												  paths: arr_polygon1,
+												  strokeColor: "#0FF000",
+												  strokeOpacity: 0.8,
+												  strokeWeight: 2,
+												  fillColor: "#0FF000",
+												  fillOpacity: 0.35
+								 });
+
+								polygon2 = new google.maps.Polygon({
+												  paths: arr_polygon2,
+												  strokeColor: "#0900ff",
+												  strokeOpacity: 0.8,
+												  strokeWeight: 2,
+												  fillColor: "#0092ff",
+												  fillOpacity: 0.35
+								 });
+							    polygon1.setMap(map_Comparison);
+								polygon2.setMap(map_Comparison);
+
+							    array_polygon.push(polygon1.getPath().getArray());											  
+								array_polygon.push(polygon2.getPath().getArray());
+									
+								var clipper_final_poly = mergePolygon();
+
+								parcelleHeig = new Array();
+								for(i = 0; i < clipper_final_poly.length; i++) {
+												  for(j = 0; j < clipper_final_poly[i].length; j++) {
+													  parcelleHeig.push(new google.maps.LatLng(clipper_final_poly[i][j].X, clipper_final_poly[i][j].Y));
+												  }
+												  polygoneParcelleHeig = new google.maps.Polygon({
+													  paths: parcelleHeig,
+													  strokeColor: "#800080",
+													  strokeOpacity: 0.8,
+													  strokeWeight: 2,
+													  fillColor: "#b67db6",
+													  fillOpacity: 0.35
+												  });
+												  polygoneParcelleHeig.setMap(map_Comparison);
+												//  polygoneParcelleHeig.fitBounds(bounds);												  
+								}
+						          
+								$scope.txtLocationVisible = false;
+								$scope.mapMain = false;
+								$scope.mapComparsion = true;								
+						 }
+				   }
+					
+					
+				   });
+             }		
+	  }
+		
+		$scope.btnEditMetadata = function(loc)
+		{
+				$scope.txtLocationEditable = false;
+				$('#txtLocationEditable').focus();
+			 /*$scope.showPolygonModal = !$scope.showPolygonModal;			
+		     $scope.ShowMetaUpdate = true;	
+			 $scope.btnCreate = false;
+			 
+             $('#ddlState').val(loc[0].state);
+             $('#ddlType').val(loc[0].type).attr("selected", "selected");
+             $('#ddlStatus').val(loc[0].status).attr("selected", "selected");			 
+			 $('#txtNewLocation').val(loc[0].name);*/
+			
+		};
+		  
+		 /* $scope.btnMetaUpdate = function()
+		  {
+		    debugger;
+		   $scope.showPolygonModal = !$scope.showPolygonModal;			
+		  $scope.lblInfo = [];
+		      var Info = '';
+                  Info += "Name : " +  $('#txtNewLocation').val();
+                  Info += ";\n\r State : " + $('#ddlState').val();
+                  Info += ";\n\r Status : " + $('#ddlStatus').val();
+                  Info += ";\n\r Type : " + $('#ddlType').val();
+                  $scope.lblInfo = Info;
+                  $('#dvMsg').show();  
+		  };*/
+		  
+		  
+    }]);
+  
+    // Get latest version
+    myApp.filter('getLastestVersion', function () {
+        return function (data) {	
+            var tmp;
+            var highest = 0;	  
+            angular.forEach(data,function(item){    
+                tmp = item.version;   
+                if (tmp > highest) highest = tmp;
+			
+            });
+            return highest;
+        };
+    });
+
+    myApp.controller("OtherController",['$scope', "$http",function($scope, $http){
+        $scope.pageChangeHandler = function(num) {
+            console.log('going to page ' + num);
+        };
+        $scope.search.btnModelClose = function()
+        { 
+            alert('Please submit your selceted location before close.');
+        };
+  
+    }]);
+   
+    myApp.directive('modal', function () {
+        return {
+            template: '<div class="modal fade">' + 
+              '<div class="modal-dialog" style= "width:90%; height:95%;">' + 
+              '<div class="modal-content">' + 
+                '<div class="modal-header">' + 
+                '<button id="btnModelClose" ng-click="search.btnModelClose()" type="button" class="close" data-dismiss="modal" aria-hidden="true" title="Close">&times;</button>' + 
+                '<h4 class="modal-title">{{ title }}</h4>' + 
+                '</div>' + 
+                '<div class="modal-body" ng-transclude></div>' + 
+              '</div>' + 
+              '</div>' + 
+            '</div>',
+            restrict: 'E',
+            transclude: true,
+            replace:true,
+            scope:true,
+            link: function postLink(scope, element, attrs) {
+                scope.title = attrs.title;
+
+                scope.$watch(attrs.visible, function(value){
+                    if(value == true)
+                        $(element).modal('show');
+                    else
+                        $(element).modal('hide');
+                });
+
+                $(element).on('shown.bs.modal', function(){
+                    scope.$apply(function(){
+                        scope.$parent[attrs.visible] = true;
+                    });
+                });
+
+                $(element).on('hidden.bs.modal', function(){
+                    scope.$apply(function(){
+                        scope.$parent[attrs.visible] = false;
+                    });
+                });
+    
+  
+            }
+        };
+    });
+  
+    
+   
+ </script>
+<body ng-controller="ngMapCtrl">
+    <div class="container" style="float: left">
+        <h2 class="Header">Lost ? --> Location Optimization and Standardization Tool </h2>
+        <input type="hidden" ng-model="hdnGeoId">
+        <div class="row">
+            <div class="col-md-12" id="divMsgContent">
+                <div id="dvMsg{{location.geoLibId}}" class="alert alert-success" ng-repeat="location in selectedLocations">
+                    {{$index + 1}}) 
+    Name: {{location.name}} ; 
+    GeoLibId: {{location.geoLibId}} ; 
+    State: {{location.state}} ; 
+    Status: {{location.status}} ; 
+    Type: {{location.type}} ; 
+   
+                    <button id='btnShowC' type='submit' value='ShowCoordinates' style='margin-left: 10px;'>Show Coordinates </button>
+                    <button id='btnCenter' ng-click="btnCenter(location)" type='submit' value='CenterMap' style='margin-left: 10px;'>Center Map </button>				
+                    <a href='#' class='close' ng-click='btnClose(location)'>&times;</a>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <button id="btnShow" ng-click="toggleModal()">Search</button>
+                <input type="button" id="btnNewLocation" value="New location" ng-click="btnNewLocation()" />
+                <input type="button" id="btnAddPolygon" value="Add polygons" ng-click="btnAddPolygon()" />
+                <input type="button" id="EditButton" value="{{EditButton}}" ng-click="edit()">
+                <input type="button" id="btnSave" value="Save" ng-click="btnSaveClick()" />
+                <input type="button" id="btnClearAll" value="Clear All" ng-click="btnClearAll()" />
+                <input type="button" id="btnGlobalCenter" value="Global Center Map" ng-click="btnGlobalCenterMap(selectedLocations)" />
+				<input type="button" id='btnEditMetadata' value="Edit meta data" ng-click="btnEditMetadata(selectedLocations)" />
+            </div>
+
+            <div class="col-md-offset-4">
+                <input type="button" id="btnPublishLoc" ng-model="btnPublishLoc" value="Publish All Locations" ng-click="btnSubmitPublishLoc(selectedLocations)" />
+                <input type="button" id="btnVersionHistory" value="Version History" ng-click="btnVersionHistory()" ng-show="btnVersionSelect" />
+            </div>
+            <div class="col-md-8">
+                <div id="dvMsg" class="alert alert-success">
+                    <a href="#" class="close" ng-click="btnClearAll()">&times;</a>
+                    <label id="lblMsg">{{lblInfo}} </label>
+                </div>
+            </div>
+
+        </div>
+
+
+        <div class="row">
+            <div class="col-xs-12 col-md-4" ng-show="txtLocationVisible">
+                <textarea id="txtLocation" name="txtLocation" ng-model="txtLocation" rows="5" style="width: 100%; height: 80%;"
+                    class="ng-pristine ng-valid" ng-disabled="txtLocationEditable"></textarea>
+                <br />
+                <div class="row">
+                    <div class="col-md-8">
+                    </div>
+                </div>
+            </div>
+			 <div class="col-md-12 col-md-8" ng-show="mapComparsion">
+			<div id="map" style=" width: 750px; height:500px;"></div>
+			</div>
+            <div class="col-md-12 col-md-8" ng-show="mapMain">
+                <div ng-repeat="path in pathsTest">{{path}}</div>
+				
+                <map zoom="4" map-type-id="TERRAIN" class="CenterMap" center="24.886436490787712, -70.2685546875" after-parse="parseMapDoc">
+                    <shape id="polygons_{{$index}}" name="polygon" ng-repeat="path in paths" paths="{{path}}" stroke-color="{{getPolygonBorderColor($index)}}" stroke-opacity="0.8" stroke-weight="2" fill-color="{{getPolygonColor($index)}}" fill-opacity="0.7" editable="{{$parent.isEdit}}">
+       </shape>
+                </map>
+            </div>
+        </div>
+        <modal title="Version History" visible="showVersionModal" style="top: 10%; left: 20%; width: 50%; overflow-y: hidden;">
+    <div id="dvVersionSelected"  class="panel panel-default">
+      <table id="tblVersionSelected" st-table = "rowcollection"  class="table table-striped table-hover">
+        <tr>
+          <th><b>Select:</b></th>
+          <th><b>Version:</b></th>
+          <th><b>Updated:</b></th>
+        </tr>
+        <tbody id= "tblVersionSelected">
+          <tr ng-repeat="verHistory in versionList.versionHistory | orderBy: 'version':true"> 
+          <td>
+		  <input type="checkbox" style="cursor:pointer;"  ng-model="verHistory.chkVersionSelect"  
+		        ng-click="verHistory.chkVersionSelect= !verHistory.chkVersionSelect;chkVersion(verHistory)" ng-disabled="checked==limit && !verHistory.chkVersionSelect">
+		  </td>
+          <td>{{verHistory.version}}</td>
+          <td>{{versionList.updated | date: 'MM/dd/yyyy'}}</td>
+        </tr>
+      </tbody>
+    </table>	 
+    </div>
+	<button class="btn btn-success" ng-model="verHistory.btnVersionSubmit" ng-click="btnVersionSubmit($scope.selectedVersionLocations)"> Submit </button>
+   </modal>
+
+        <modal title="New Location" visible="showPolygonModal">
+   <div>
+    
+    <div class="row"> 
+        <div class="form-group">  
+             <label for="txtNewLocation" class="col-sm-1 control-label"> Name :  </label> 
+            <div class="col-md-4">           
+              <input class="form-control" type="text" id="txtNewLocation" tabindex="1"> </input>
+             </div>
+          </div>
+     </div>
+      <div class="row">  
+        <div class="form-group">        
+             <label for="lblType" class="col-sm-1 control-label"> Type :  </label>  
+            <div class="col-md-4">           
+              <select id="ddlType" class="form-control" tabindex="2" ng-model="ddlType" ng-change="showState(ddlType)">
+                <option>ZIP</option>
+                <option>CITY</option>
+                <option>DMA</option>
+                <option>STATE</option>
+               </select>
+             </div>
+       </div>
+      </div>
+     <div class="row">  
+        <div class="form-group">        
+             <label for="lblState" class="col-sm-1 control-label"> State :  </label>  
+            <div class="col-md-4">           
+              <select id="ddlState" class="form-control"  tabindex="3" ng-disabled="ddlState"> 
+                <option>Null</option>
+                <option>AL</option>
+                <option>AK</option>
+                <option>AS</option>
+                <option>AZ</option>
+                <option>AR</option>
+                <option>CA</option>
+                <option>CO</option>
+                <option>CT</option>
+                <option>DE</option>
+                <option>DC</option>
+                <option>FL</option>
+                <option>GA</option>
+                <option>GU</option>
+                <option>HI</option>
+                <option>ID</option>
+                <option>IL</option>
+                <option>IN</option>
+                <option>IA</option>
+                <option>KS</option>
+                <option>KY</option>
+                <option>LA</option>
+                <option>ME</option>
+                <option>MD</option>
+                <option>MH</option>
+                <option>MA</option>
+                <option>MI</option>
+                <option>FM</option>
+                <option>MN</option>
+                <option>MS</option>
+                <option>MO</option>
+                <option>MT</option>
+                <option>NE</option>
+                <option>NV</option>
+                <option>NH</option>
+                <option>NJ</option>
+                <option>NM</option>
+                <option>NY</option>
+                <option>NC</option>
+                <option>ND</option>
+                <option>MP</option>
+                <option>OH</option>
+                <option>OK</option>
+                <option>OR</option>
+                <option>PW</option>
+                <option>PA</option>
+                <option>PR</option>
+                <option>RI</option>
+                <option>SC</option>
+                <option>SD</option>
+                <option>TN</option>
+                <option>TX</option>
+                <option>UT</option>
+                <option>VT</option>
+                <option>VA</option>
+                <option>VI</option>
+                <option>WA</option>
+                <option>WV</option>
+                <option>WI</option>
+                <option>WY</option> 
+              </select>
+             </div>
+       </div>
+      </div>
+     <div class="row">  
+       <div class="form-group">       
+           <label for="lblStatus" class="col-sm-1 control-label"> Status :  </label>  
+          <div class="col-md-4">           
+            <Select id="ddlStatus" class="form-control" tabindex="4">
+             <option>PENDING</option>
+			 <option>ACTIVE</option>
+             </select>
+           </div>
+     </div>   
+     </div>
+       <div class="row">
+       <div class="col-md-4">
+       </div>
+        <button class="btn btn-success" ng-click="btnCreate()"  ng-show="btnCreate">Create </button>
+        <button id="btnMetaUpdate" class="btn btn-primary" ng-click="btnMetaUpdate()" ng-show="ShowMetaUpdate"> Update </button>
+        </div>     
+     <div class="row">
+       <div class="col-md-4">
+             <label id="lblNewLocationMsg" data-dismiss="modal" style="width: 50%;padding-left: 5px; color:#FF0000;"> </label>
+       </div>
+        </div>    
+  </div>
+
+   </modal>
+
+        <modal title="Search location" visible="showModal">
+    <form role="form">  
+          <div class="row">
+        <div class="col-xs-2 col-md-2">
+        <h4>Locations Page: {{ search.currentPage }}</h4>
+        </div>
+        <div class="col-xs-4 col-md-4">
+         <input ng-model="search.text" id="txtSearch1" name="txtSearch1" class="form-control" placeholder="Start typing..." ng-disabled="search.chkFindLoc">          
+        </div>
+      
+        <div class="col-xs-2 col-md-2 checkbox">
+         <label>
+          <input type="checkbox" ng-model="search.chkShowLoc" ng-click="search.chkShowLoc = !search.chkShowLoc;chkShowLocations()"> Show Unpublished Locationss </input>
+         </label>
+        </div>
+       <div class="col-xs-1 col-md-1">
+      
+        </div>
+          <div class="col-xs-2 col-md-2 checkbox">
+         <label>
+          <input type="checkbox" ng-model="search.chkFindLoc" ng-click="search.chkFindLoc = !search.chkFindLoc;chkFindLocations()"> Find Unpublished Locations </input>
+         </label>
+        </div>
+      
+      </div>
+          <br>
+    
+  <div id="dvLocationSelected" style="width:100%;" ng-show="selectedLocations.length>0">  
+  Selected Location :    
+             <table id="tblLocationSelected" st-table = "rowCollection" class="table table-striped table-hover  ">           
+            <tbody>
+                   <tr ng-repeat="location in selectedLocations">
+                    <td>{{$index + 1}}</td>       
+                    <td>{{location.name}}</td>   
+                    <td>{{location.type}}</td> 
+                    <td>{{location.state}}</td>
+                    <td>{{location.status}}</td> 
+                    <td>{{location.geoLibId}}</td>
+                    <td>{{location.archivedLocations | getLastestVersion}}</td>
+                    <td>{{location.updated  | date:'MM/dd/yyyy' }}</td>
+                    <td><a href="#" class="close" ng-click="btnRemove.Remove(location)" title="Remove">&times;</a></td>
+                </tr>
+              </tbody>
+        </table>
+         <input type="button" id="btnSubmitLocation" ng-model="btnSubmitLocation" ng-click="btnSubmitLocation(selectedLocations)" style="cursor:pointer;" class="btn btn-success" value="Submit">
+     <input type="button" id="btnClearLocation" ng-model="btnClearLocation" ng-click="btnClearLocation(selectedLocations)" style="cursor:pointer;" class="btn btn-danger" value="Clear">
+  </div>
+
+      
+     <div  id="dvLocationSelect" class="panel panel-default" style="width:100%;">
+        <table id="tblLocations" st-table = "rowCollection" class="table table-striped table-hover">            
+                <tr class="info">
+                  <th><b>select</b></th>
+                  <th><b> Name:</b></th> 
+                   <th><b>Type:</b></th>  
+                   <th><b>State:</b></th>
+                   <th><b>status:</b></th>
+                   <th><b>GeoLibId:</b></th>
+                   <th><b>Version:</b></th>
+                   <th><b>Updated:</b></th> 
+                </tr>
+              
+            <tbody>
+                   <tr dir-paginate="location in locations | filter:txtSearch| filter:searchSelected(false) | itemsPerPage: pageSize" current-page="search.currentPage" ng-click="SelectedLocationList.checkbox(location)" style="cursor:pointer;">
+                     <td><input type="checkbox" id="chkSelect" name="chkSelect"></td>             
+                    <td>{{location.name}}</td>   
+                    <td>{{location.type}}</td> 
+                    <td>{{location.state}}</td>
+                    <td>{{location.status}}</td> 
+                    <td>{{location.geoLibId}}</td>
+                    <td>{{location.archivedLocations | getLastestVersion}}</td>
+                    <td>{{location.updated | date:'MM/dd/yyyy'}}</td>
+                </tr>
+              </tbody>
+        </table>
+  </div>
+        
+
+      <div ng-controller="OtherController" class="other-controller">         
+          <div class="text-center">
+ <dir-pagination-controls boundary-links="true" on-page-change="pageChangeHandler(newPageNumber)" template-url="pagination.html"></dir-pagination-controls>
+          </div>
+        </div>
+    
+    </form>
+  </modal>
+
+    </div>
+
+    <div class="modalLoading">
+        <!-- Place at bottom of page -->
+    </div>
+
+</body>
+</html>
